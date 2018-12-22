@@ -81,23 +81,24 @@ void relaxation(double* arr, int dim, double precision) {
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
         // test everything gets their elements
-        char strArr[size*5];
+        char strArr[size*6];
         char *s = malloc(sizeof(char) * 5);
         sprintf(s, "%.2f ", workingArr[0]);
         strcpy(strArr, s);
     
         for (int i = 1; i < size; i++) {
             sprintf(s, "%.2f ", workingArr[i]);
+            if (i % dim == 0) strcat(strArr, "\n");
             strcat(strArr, s);
         }
-        printf("Processor with rank: %d has a working array of: %s\n", rank, strArr);
+        printf("Processor with rank: %d has a working array of: \n%s\n", rank, strArr);
 
 	}
 }
 
 int main() {
-    double arr[25] = {1,1,1,1,1,1,0,0,0,1,1,0,0,0,1,1,0,0,0,1,1,1,1,1,1};
+    double arr[36] = {1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,1,1,1,1,1};
     MPI_Init(NULL, NULL);
-    relaxation(&arr[0], 5, 0);
+    relaxation(&arr[0], 6, 0);
     MPI_Finalize();
 }
