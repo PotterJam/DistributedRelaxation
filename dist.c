@@ -58,16 +58,16 @@ void relaxation(double* arr, int dim, double precision) {
 
             // set rank 0 rows and arr
             rows = &rows[0];
-            size = elemsToCompute[0];
-            workingArr = malloc(sizeof(double) * elemsToCompute[0]);
-            memcpy(workingArr, &arr[0], sizeof(double) * elemsToCompute[0]);
+            size = elemsToCompute[0] + (2*dim);
+            workingArr = malloc(sizeof(double) * size);
+            memcpy(workingArr, &arr[0], sizeof(double) * size);
 
             // send arrays to other processes
             MPI_Request req[numProcs-1];
             MPI_Status statuses[numProcs-1];
             for (int i = 1; i < numProcs; i++) {
                 int index = indices[i];
-                int procArrSize = elemsToCompute[i];
+                int procArrSize = elemsToCompute[i] + (2*dim);
                 MPI_Send(&procArrSize, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
                 MPI_Isend(&arr[index], procArrSize, MPI_DOUBLE, i, 0, 
                     MPI_COMM_WORLD, &req[i-1]);
