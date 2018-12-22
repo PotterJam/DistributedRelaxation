@@ -81,7 +81,7 @@ void relaxation(double* arr, int dim, double precision) {
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
         // test everything gets their elements
-        char strArr[size*6];
+        char strArr[size*dim];
         char *s = malloc(sizeof(char) * 5);
         sprintf(s, "%.2f ", workingArr[0]);
         strcpy(strArr, s);
