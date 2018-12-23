@@ -65,9 +65,9 @@ double* initMasterProc(double* arr, int dim, double precision, int *size) {
     for (int i = 1; i < numProcs; i++) {
         int index = indices[i];
         int procArrSize = elemsToCompute[i] + (2*dim);
-        MPI_Send(&procArrSize, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
+        MPI_Send(&procArrSize, 1, MPI_INT, i, 1, MPI_COMM_COMPUTE);
         MPI_Isend(&arr[index], procArrSize, MPI_DOUBLE, i, 0, 
-                MPI_COMM_WORLD, &req[i-1]);
+                MPI_COMM_COMPUTE, &req[i-1]);
     }
     MPI_Waitall(numProcs-1, req, statuses);
 
@@ -80,37 +80,42 @@ double* initSlaveProc(int dim, double precision, int size, int rank) {
     MPI_Comm_size(MPI_COMM_COMPUTE, &numProcs);
 
     workingArr = malloc(sizeof(double) * size);
-    MPI_Recv(workingArr, size, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(workingArr, size, MPI_DOUBLE, 0, 0, MPI_COMM_COMPUTE, MPI_STATUS_IGNORE);
 
     return workingArr;
 }
 
 int main() {
-    int dim = 6;
+    int dim = 5;
     int precision = 0;
 
     MPI_Init(NULL, NULL);
     int rank;    
-    int inUse = rank < dim-2;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int inUse = rank < dim-2;
     MPI_Comm_split(MPI_COMM_WORLD, inUse, rank, &MPI_COMM_COMPUTE);
+    if (!inUse) {
+        MPI_Finalize();
+        exit(0);
+    }
+
     double *workingArr;
     int size;
-    if (inUse && rank == 0) {
+    if (rank == 0) {
         // read array from file
-        double arr[36] = 
-           {1,1,1,1,1,1,
-            1,0,0,0,0,1,
-            1,0,0,0,0,1,
-            1,0,0,0,0,1,
-            1,0,0,0,0,1,
-            1,1,1,1,1,1};
+        //double arr[36] = {1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,1,1,1,1,1};
+        double arr[25] = {1,1,1,1,1,1,0,0,0,1,1,0,0,0,1,1,0,0,0,1,1,1,1,1,1};
         workingArr = initMasterProc(&arr[0], dim, precision, &size);
-    } else if (inUse) {
-        MPI_Recv(&size, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    } else {
+        MPI_Recv(&size, 1, MPI_INT, 0, 1, MPI_COMM_COMPUTE, MPI_STATUS_IGNORE);
         workingArr = initSlaveProc(dim, precision, size, rank);
     }
     printInfo(workingArr, size, dim, rank);
+    
+    //relax(workingArr, size, dim, precision, rank);
+
+    // relax working array, sending top and bottom rows to top and bottom ranks
+    // send out settled flag to everyone async
 
     MPI_Finalize();
 }
