@@ -85,6 +85,67 @@ double* initSlaveProc(int dim, double precision, int size, int rank) {
     return workingArr;
 }
 
+double avgElem(double* arr, int index, int dim) {
+    double up = arr[index-dim];
+    double down = arr[index+dim];
+    double left = arr[index-1];
+    double right = arr[index+1];
+    return (up+down+left+right)/4;
+}
+
+void averageRow(double* workingArr, double* avgArr, int dim, int row) {
+    int startIndex = row * dim;
+
+    // fixed elements at edge of matrix
+    avgArr[startIndex] = workingArr[startIndex];
+    avgArr[startIndex+dim-1] = workingArr[startIndex+dim-1];
+
+    // average other elements in row
+    for (int i = 1; i < dim-1; i++) {
+        avgArr[startIndex+i] = avgElem(workingArr, startIndex+i, dim); 
+    }
+}
+
+double* relax(double* workingArr, int size, int dim, double precision, int rank) {
+    int numRows = size/dim;
+    int *rowIndices = malloc(sizeof(int) * numRows);
+    double* avgArr = malloc(sizeof(double) * size);
+
+    int nextRowIndex = 0;
+    for (int i = 0; i < numRows; i++) {
+        rowIndices[i] = nextRowIndex;
+        nextRowIndex += dim;
+    }
+    // async receive top and bottom rows
+
+    int numProcs;
+    MPI_Comm_size(MPI_COMM_COMPUTE, &numProcs);
+
+    averageRow(workingArr, avgArr, dim, 1);
+    if (rank == 0) {
+        memcpy(&avgArr[0], &workingArr[0], sizeof(double) * dim);
+    } else if (rank == numProcs-1) {
+        int lastI = rowIndices[numRows-1];
+        memcpy(&avgArr[lastI], &workingArr[lastI], sizeof(double) * dim);
+    }
+    
+    // async send top row to rank-1, unless rank == 0
+
+    if (numRows > 3) { 
+        averageRow(workingArr, avgArr, dim, numRows-2);
+        // async send bottom row to rank+1, unless rank == numProcs-1
+
+        for (int i = 2; i < numRows-2; i++) {
+            averageRow(workingArr, avgArr, dim, i);            
+        }
+    }
+    return avgArr;
+}
+
+// TAG 0 is the array
+// TAG 1 is the size
+// TAG 2 is the settle flag
+// TAG 3 is updated rows
 int main() {
     int dim = 5;
     int precision = 0;
@@ -110,9 +171,9 @@ int main() {
         MPI_Recv(&size, 1, MPI_INT, 0, 1, MPI_COMM_COMPUTE, MPI_STATUS_IGNORE);
         workingArr = initSlaveProc(dim, precision, size, rank);
     }
-    printInfo(workingArr, size, dim, rank);
-    
-    //relax(workingArr, size, dim, precision, rank);
+
+    double *newArr = relax(workingArr, size, dim, precision, rank);
+    printInfo(newArr, size, dim, rank);
 
     // relax working array, sending top and bottom rows to top and bottom ranks
     // send out settled flag to everyone async
