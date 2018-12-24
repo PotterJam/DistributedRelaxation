@@ -23,7 +23,7 @@ int* rowsPerProc(int numProcs, int dim) {
 void printInfo(double* workingArr, int size, int dim, int rank) {
     char strArr[size*dim];
     char *s = malloc(sizeof(char) * 5);
-    sprintf(s, "%.2f", workingArr[0]);
+    sprintf(s, "%.2f ", workingArr[0]);
     strcpy(strArr, s);
 
     for (int i = 1; i < size; i++) {
@@ -31,7 +31,7 @@ void printInfo(double* workingArr, int size, int dim, int rank) {
         if (i % dim == 0) strcat(strArr, "\n");
         strcat(strArr, s);
     }
-    printf("Processor with rank %d has a working array of: \n%s\n ", rank, strArr);
+    printf("Processor with rank %d has a working array of: \n%s\n", rank, strArr);
 }
 
 double* initMasterProc(double* arr, int dim, double precision, int *size) {
@@ -132,7 +132,7 @@ double* relax(double* workingArr, int size, int dim, double precision) {
         memcpy(&avgArr[0], &workingArr[0], sizeof(double) * dim);
     } else {
         MPI_Isend(&avgArr[dim], dim, MPI_DOUBLE, rank-1, 3, MPI_COMM_COMPUTE, &topRowSend);
-        MPI_Irecv(&avgArr[0], dim, MPI_DOUBLE, rank-1, 3, MPI_COMM_COMPUTE, &topRowReq);
+        MPI_Irecv(&avgArr[0], dim, MPI_DOUBLE, rank-1, 4, MPI_COMM_COMPUTE, &topRowReq);
     }
 
     averageRow(workingArr, avgArr, dim, numRows-2);
@@ -141,7 +141,7 @@ double* relax(double* workingArr, int size, int dim, double precision) {
     if (bottomEdge) {
         memcpy(&avgArr[lastI], &workingArr[lastI], sizeof(double) * dim);
     } else {
-        MPI_Isend(&avgArr[secondLastI], dim, MPI_DOUBLE, rank+1, 3, MPI_COMM_COMPUTE, &bottomRowSend);
+        MPI_Isend(&avgArr[secondLastI], dim, MPI_DOUBLE, rank+1, 4, MPI_COMM_COMPUTE, &bottomRowSend);
         MPI_Irecv(&avgArr[lastI], dim, MPI_DOUBLE, rank+1, 3, MPI_COMM_COMPUTE, &bottomRowReq);
     }
 
