@@ -23,7 +23,7 @@ int* rowsPerProc(int numProcs, int dim) {
 void printInfo(double* workingArr, int size, int dim, int rank) {
     char strArr[size*dim];
     char *s = malloc(sizeof(char) * 5);
-    sprintf(s, "%.2f ", workingArr[0]);
+    sprintf(s, "%.2f", workingArr[0]);
     strcpy(strArr, s);
 
     for (int i = 1; i < size; i++) {
@@ -31,7 +31,7 @@ void printInfo(double* workingArr, int size, int dim, int rank) {
         if (i % dim == 0) strcat(strArr, "\n");
         strcat(strArr, s);
     }
-    printf("Processor with rank: %d has a working array of: \n%s\n", rank, strArr);
+    printf("Processor with rank %d has a working array of: \n%s\n ", rank, strArr);
 }
 
 double* initMasterProc(double* arr, int dim, double precision, int *size) {
@@ -49,7 +49,6 @@ double* initMasterProc(double* arr, int dim, double precision, int *size) {
     int indices[numProcs];
     int nextIndex = 0;
     for (int i = 0; i < numProcs; i++) {
-        printf("index for proc %d is: %d\n", i, nextIndex);
         indices[i] = nextIndex;
         int prevIndex = nextIndex;
         nextIndex = elemsToCompute[i] + prevIndex;
@@ -74,7 +73,7 @@ double* initMasterProc(double* arr, int dim, double precision, int *size) {
     return workingArr;
 }
 
-double* initSlaveProc(int dim, double precision, int size, int rank) {
+double* initSlaveProc(int dim, double precision, int size) {
     double *workingArr;
     int numProcs;
     MPI_Comm_size(MPI_COMM_COMPUTE, &numProcs);
@@ -106,7 +105,12 @@ void averageRow(double* workingArr, double* avgArr, int dim, int row) {
     }
 }
 
-double* relax(double* workingArr, int size, int dim, double precision, int rank) {
+double* relax(double* workingArr, int size, int dim, double precision) {
+    int numProcs;
+    int rank;
+    MPI_Comm_size(MPI_COMM_COMPUTE, &numProcs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
     int numRows = size/dim;
     int *rowIndices = malloc(sizeof(int) * numRows);
     double* avgArr = malloc(sizeof(double) * size);
@@ -116,29 +120,45 @@ double* relax(double* workingArr, int size, int dim, double precision, int rank)
         rowIndices[i] = nextRowIndex;
         nextRowIndex += dim;
     }
+    
+    int topEdge = rank == 0;
+    int bottomEdge = rank == numProcs-1;
+
+    MPI_Request topRowReq, bottomRowReq;
+    MPI_Request topRowSend, bottomRowSend;
     // async receive top and bottom rows
-
-    int numProcs;
-    MPI_Comm_size(MPI_COMM_COMPUTE, &numProcs);
-
     averageRow(workingArr, avgArr, dim, 1);
-    if (rank == 0) {
+    if (topEdge) {
         memcpy(&avgArr[0], &workingArr[0], sizeof(double) * dim);
-    } else if (rank == numProcs-1) {
-        int lastI = rowIndices[numRows-1];
+    } else {
+        MPI_Isend(&avgArr[dim], dim, MPI_DOUBLE, rank-1, 3, MPI_COMM_COMPUTE, &topRowSend);
+        MPI_Irecv(&avgArr[0], dim, MPI_DOUBLE, rank-1, 3, MPI_COMM_COMPUTE, &topRowReq);
+    }
+
+    averageRow(workingArr, avgArr, dim, numRows-2);
+    int lastI = rowIndices[numRows-1];
+    int secondLastI = rowIndices[numRows-2];
+    if (bottomEdge) {
         memcpy(&avgArr[lastI], &workingArr[lastI], sizeof(double) * dim);
+    } else {
+        MPI_Isend(&avgArr[secondLastI], dim, MPI_DOUBLE, rank+1, 3, MPI_COMM_COMPUTE, &bottomRowSend);
+        MPI_Irecv(&avgArr[lastI], dim, MPI_DOUBLE, rank+1, 3, MPI_COMM_COMPUTE, &bottomRowReq);
+    }
+
+    for (int i = 2; i < numRows-2; i++) {
+        averageRow(workingArr, avgArr, dim, i);            
+    }
+
+    if (!topEdge) {
+        MPI_Wait(&topRowReq, MPI_STATUS_IGNORE);
+        MPI_Wait(&topRowSend, MPI_STATUS_IGNORE);
     }
     
-    // async send top row to rank-1, unless rank == 0
-
-    if (numRows > 3) { 
-        averageRow(workingArr, avgArr, dim, numRows-2);
-        // async send bottom row to rank+1, unless rank == numProcs-1
-
-        for (int i = 2; i < numRows-2; i++) {
-            averageRow(workingArr, avgArr, dim, i);            
-        }
+    if (!bottomEdge) {
+        MPI_Wait(&bottomRowReq, MPI_STATUS_IGNORE);
+        MPI_Wait(&bottomRowSend, MPI_STATUS_IGNORE);
     }
+
     return avgArr;
 }
 
@@ -169,10 +189,10 @@ int main() {
         workingArr = initMasterProc(&arr[0], dim, precision, &size);
     } else {
         MPI_Recv(&size, 1, MPI_INT, 0, 1, MPI_COMM_COMPUTE, MPI_STATUS_IGNORE);
-        workingArr = initSlaveProc(dim, precision, size, rank);
+        workingArr = initSlaveProc(dim, precision, size);
     }
 
-    double *newArr = relax(workingArr, size, dim, precision, rank);
+    double *newArr = relax(workingArr, size, dim, precision);
     printInfo(newArr, size, dim, rank);
 
     // relax working array, sending top and bottom rows to top and bottom ranks
