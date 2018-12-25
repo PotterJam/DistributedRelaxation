@@ -216,7 +216,27 @@ void relax(double* workingArr, int size, int dim, double precision, int numProcs
         }
     }  
     free(rowIndices);
-    free(avgArr);
+}
+
+double* createTestArr(int dim) {
+    int size = dim * dim;
+    double *testArr = malloc(sizeof(double) * dim * dim);
+
+    double *topandbottomrow = malloc(sizeof(double) * dim);
+    for (int i = 0; i < dim; i++) {
+        topandbottomrow[i] = 1;
+    }
+
+    double *middlerow = calloc(dim, sizeof(double));
+    middlerow[0] = 1;
+    middlerow[dim-1] = 1;
+
+    memcpy(&testArr[0], &topandbottomrow[0], sizeof(double) * dim);
+    memcpy(&testArr[size-dim], &topandbottomrow[0], sizeof(double) * dim);
+    for (int i = dim; i < size-dim; i += dim) {
+        memcpy(&testArr[i], &middlerow[0], sizeof(double) * dim);
+    }
+    return testArr;
 }
 
 // TAG 0 is the initial array
@@ -225,8 +245,8 @@ void relax(double* workingArr, int size, int dim, double precision, int numProcs
 // TAG 3 is updated rows (top)
 // TAG 4 is updated rows (bottom)
 int main() {
-    int dim = 6;
-    double precision = 0.01;
+    int dim = 50;
+    double precision = 0.001;
 
     MPI_Init(NULL, NULL);
     int rank;    
@@ -243,36 +263,31 @@ int main() {
     }
     
     int *elemsToCompute, *indices;
-    double *workingArr;
+    double *initialArr, *workingArr;
     int size;
     if (rank == 0) {
         elemsToCompute = malloc(sizeof(int) * numProcs);
         indices = malloc(sizeof(int) * numProcs);
         
-        // read array from file
-        double arr[36] = {1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,1,1,1,1,1};
-        workingArr = initMasterProc(&arr[0], elemsToCompute, indices, dim, precision, &size);
+        initialArr = createTestArr(dim);
+        //double initialArr[36] = {1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,1,1,1,1,1};
+        workingArr = initMasterProc(initialArr, elemsToCompute, indices, dim, precision, &size);
     } else {
         MPI_Recv(&size, 1, MPI_INT, 0, 1, MPI_COMM_COMPUTE, MPI_STATUS_IGNORE);
         workingArr = initSlaveProc(dim, precision, size);
     }
 
     relax(workingArr, size, dim, precision, numProcs, rank);
-    printInfo(workingArr, size, dim, rank);
+    //printInfo(workingArr, size, dim, rank);
 
-    double *finalArr; 
-    if (rank == 0) {
-        finalArr = malloc(sizeof(double) * dim * dim);
-    }
-    
     int computeSize = size - (dim*2);
-    MPI_Gatherv(&workingArr[dim], computeSize, MPI_DOUBLE, &finalArr[dim],
+    MPI_Gatherv(&workingArr[dim], computeSize, MPI_DOUBLE, &initialArr[dim],
             elemsToCompute, indices, MPI_DOUBLE, 0, MPI_COMM_COMPUTE);
     
     free(workingArr);
     if (rank == 0) {
-        printInfo(finalArr, dim*dim, dim, rank);
-        free(finalArr);
+        printInfo(initialArr, dim*dim, dim, rank);
+        free(initialArr);
     }
 
     MPI_Finalize();
