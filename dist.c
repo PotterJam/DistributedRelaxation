@@ -36,7 +36,7 @@ void printInfo(double* workingArr, int size, int dim, int rank) {
     printf("Processor with rank %d has a working array of: \n%s\n", rank, strArr);
 }
 
-double* initMasterProc(double* arr, int* elemsToCompute, int* indices, 
+double* initRootProc(double* arr, int* elemsToCompute, int* indices, 
         int dim, double precision, int *size) {
     int numProcs;
     MPI_Comm_size(MPI_COMM_COMPUTE, &numProcs);
@@ -271,7 +271,7 @@ int main() {
         
         initialArr = createTestArr(dim);
         //double initialArr[36] = {1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,1,1,1,1,1};
-        workingArr = initMasterProc(initialArr, elemsToCompute, indices, dim, precision, &size);
+        workingArr = initRootProc(initialArr, elemsToCompute, indices, dim, precision, &size);
     } else {
         MPI_Recv(&size, 1, MPI_INT, 0, 1, MPI_COMM_COMPUTE, MPI_STATUS_IGNORE);
         workingArr = initSlaveProc(dim, precision, size);
